@@ -686,3 +686,15 @@
     .sarva-header .sarva-nav__menu { position: static; max-height: none; width: 100%; box-sizing: border-box; box-shadow: none; }
     .sarva-header .sarva-auth__panel { top: 12px; max-height: calc(100dvh - 24px); }
 }
+
+/* Mobile navigation is a single flowing list, including expanded submenus. */
+@media (max-width: 720px) {
+    .sarva-header .sarva-nav.is-mobile-open { flex-wrap: nowrap; max-height: none; overflow: visible; }
+    .sarva-header .sarva-nav > * { flex: 0 0 auto; width: 100%; min-width: 0; }
+    .sarva-header .sarva-nav__dropdown { display: block; }
+    .sarva-header .sarva-nav__menu { display: none; min-width: 0; max-width: 100%; transform: none; }
+    .sarva-header .sarva-nav__menu.is-open { display: block; }
+    .sarva-header .sarva-nav__menu::before { display: none; }
+    .sarva-header .sarva-nav__item { white-space: normal; overflow-wrap: anywhere; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; }
+    .sarva-header .sarva-nav__link { white-space: normal; line-height: 1.4; }
+}
