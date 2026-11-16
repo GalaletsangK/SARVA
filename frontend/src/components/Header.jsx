@@ -75,6 +75,8 @@ export default function Header() {
         key: null,
         pathname: location.pathname,
     });
+    const [mobileMenu, setMobileMenu] = useState(null);
+    const mobileMenuOpen = mobileMenu === location.key;
     const [searchText, setSearchText] = useState("");
     const [suggestions, setSuggestions] = useState([]);
     const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -261,7 +263,8 @@ export default function Header() {
                     )}
                 </form>
 
-                <nav className="sarva-nav" aria-label="Primary">
+                <button type="button" className="sarva-mobileMenu" aria-controls="sarva-primary-nav" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenu(mobileMenuOpen ? null : location.key)}>{mobileMenuOpen ? "Close menu" : "☰ Menu"}</button>
+                <nav id="sarva-primary-nav" className={`sarva-nav${mobileMenuOpen ? " is-mobile-open" : ""}`} aria-label="Primary">
                     {loading && nav.length === 0 ? (
                         <span className="sarva-nav__loading">Loading…</span>
                     ) : (
