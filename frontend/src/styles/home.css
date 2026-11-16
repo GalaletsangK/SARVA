@@ -4408,3 +4408,65 @@ body {
 
 /* Clear separation between framework cards and expandable libraries. */
 .sarva-dash .sarva-dash__main > .sarva-dash__libraryPair { margin-top: 32px; }
+
+/* Phone/tablet maps keep the canvas separate from legends and layer controls. */
+@media (max-width: 760px) {
+    .sarva-dash__workspace, .sarva-panel--featured { min-width: 0; }
+    .sarva-panel--featured .sarva-map, .sarva-map {
+        display: flex; flex-direction: column; height: auto; min-height: 0;
+        overflow: visible; isolation: isolate;
+    }
+    .sarva-map > .sarva-map__canvas {
+        position: relative; inset: auto; order: 2; flex: none;
+        width: 100%; height: clamp(340px, 58svh, 520px); min-height: 340px;
+        border-radius: 6px; overflow: hidden;
+    }
+    .sarva-map > .sarva-map__toolbar {
+        position: relative; inset: auto; order: 1; width: 100%;
+        padding: 8px; box-sizing: border-box; background: var(--surface);
+    }
+    .sarva-map .sarva-layerPicker { width: 100%; min-width: 0; }
+    .sarva-map .sarva-layerPicker > summary { min-height: 44px; box-sizing: border-box; }
+    .sarva-map .sarva-layerPicker__panel { width: 100%; max-width: 100%; max-height: 55svh; overflow-y: auto; box-sizing: border-box; }
+    .sarva-map > .sarva-map__legend {
+        position: relative; inset: auto; order: 3; width: 100%; max-width: none;
+        box-sizing: border-box; box-shadow: none; padding: 12px; font-size: 12px;
+    }
+    .sarva-map .sarva-map__infoPopover.is-open {
+        position: relative; inset: auto; width: 100%; box-sizing: border-box;
+    }
+    .sarva-map__legendHeader { flex-wrap: wrap; }
+    .sarva-map__infoButton, .sarva-map__infoClose { min-width: 36px; min-height: 36px; }
+    .sarva-map > .sarva-map__notice { position: relative; inset: auto; order: 4; width: 100%; max-width: none; box-sizing: border-box; }
+    .sarva-map > .sarva-map__zoomHint { display: none; }
+    .sarva-map .maplibregl-ctrl button { width: 40px; height: 40px; }
+    .sarva-map .maplibregl-popup { max-width: min(280px, calc(100vw - 48px)) !important; }
+    .sarva-dash__hero, .sarva-panel, .sarva-reports__grid { min-width: 0; }
+    .sarva-reports__filters { grid-template-columns: minmax(0, 1fr); }
+    .sarva-panel__head { flex-wrap: wrap; gap: 12px; }
+}
+@media (max-width: 760px) {
+    .sarva-panel--map .sarva-dash__tabs { display: grid; grid-template-columns: 1fr; width: 100%; }
+    .sarva-panel--map .sarva-dash__tabs button { height: auto; min-height: 44px; white-space: normal; line-height: 1.4; padding: 10px 12px; }
+}
+@media (max-width: 760px) {
+    .sarva-dash .sarva-dash__main { width: 100%; box-sizing: border-box; }
+    .sarva-dash .sarva-dash__main > :is(.sarva-dash__hero, .sarva-forecastNotice.is-strip, .sarva-dash__workspace, .sarva-dash__heroStats) { margin-left: 0; margin-right: 0; max-width: 100%; box-sizing: border-box; }
+    .sarva-dash .sarva-dash__labCallout { min-width: 0; max-width: 100%; box-sizing: border-box; grid-template-columns: 72px minmax(0, 1fr); }
+    .sarva-dash .sarva-dash__labCallout .sarva-dash__labLogo { width: 72px; min-width: 0; }
+}
+
+/* Keep the learning-hub logo within its grid cell at every phone width. */
+@media (max-width: 760px) {
+    .sarva-dash .sarva-dash__labCallout .sarva-dash__labLogo,
+    .sarva-dash .sarva-dash__labCallout .sarva-dash__labLogo img { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; }
+    .sarva-dash .sarva-dash__labCallout > span:last-child { overflow-wrap: anywhere; }
+}
+@media (max-width: 600px) {
+    .sarva-dash .sarva-dash__labCallout { grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 16px; }
+    .sarva-dash .sarva-dash__labCallout .sarva-dash__labLogo { width: 160px; min-height: 0; padding: 12px; justify-self: start; }
+    .sarva-dash .sarva-dash__labCallout .sarva-dash__labLogo img { height: auto; max-height: 76px; object-fit: contain; }
+    .sarva-dash .sarva-dash__labCallout strong { font-size: 17px; line-height: 1.4; }
+    .sarva-dash .sarva-dash__labCallout small { font-size: 13px; line-height: 1.6; }
+    .sarva-dash .sarva-dash__labCallout i { font-size: 14px; padding-top: 4px; }
+}

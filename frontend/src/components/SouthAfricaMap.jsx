@@ -924,6 +924,13 @@ export default function SouthAfricaMap({ activeMode, onModeChange, focusHighligh
         map.setLayoutProperty("observation-site-pins", "visibility", sitesVisible ? "visible" : "none");
     }, [activeMode, ready]);
 
+    useEffect(() => {
+        const canvas = containerRef.current;
+        if (!canvas) return;
+        const observer = new ResizeObserver(() => mapRef.current?.resize());
+        observer.observe(canvas);
+        return () => observer.disconnect();
+    }, []);
     const observationsVisible = activeMode === "rainfall-risk";
     const forecastRiskVisible = Boolean(FORECAST_LAYER_BY_MODE[activeMode]);
     const forecastLayerMeta = forecastRiskLayer?.layerMeta || {
