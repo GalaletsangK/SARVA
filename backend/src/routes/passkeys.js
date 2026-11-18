@@ -1,3 +1,4 @@
+import {loginDuration} from '../utils/authDuration.js';
 import {Router} from 'express';
 import crypto from 'node:crypto';
 import {isIP} from 'node:net';
@@ -20,7 +21,7 @@ const validCredential=value=>typeof value==='string'&&/^[A-Za-z0-9_-]{1,1400}$/.
 export function createPasskeyRouter({db,getUserById,publicUser,tokenFor,verifyPassword,config=passkeyConfig()}){
  const router=Router(),buckets=new Map();
  router.use('/auth/passkeys',(req,res,next)=>{res.set('Cache-Control','no-store');next();});
- router.get('/auth/passkeys/status',(_req,res)=>res.json({enabled:!!config,preference:'this-device'}));
+ router.get('/auth/passkeys/status',(_req,res)=>res.json({enabled:!!config,preference:'phone-or-device'}));
  router.use('/auth/passkeys',(req,res,next)=>{
   if(!config)return res.status(503).json({message:'Passkeys are not enabled on this instance.'});
   if(req.method!=='GET'&&req.get('origin')!==config.origin)return res.status(403).json({message:'Passkey request origin is not allowed.'});
@@ -70,15 +71,14 @@ export function createPasskeyRouter({db,getUserById,publicUser,tokenFor,verifyPa
   await db.query('INSERT INTO sarva.passkey_identity(user_id,rp_id,user_handle) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[user.id,config.rpID,crypto.randomBytes(32)]);
   const handle=(await db.query('SELECT user_handle FROM sarva.passkey_identity WHERE user_id=$1 AND rp_id=$2',[user.id,config.rpID])).rows[0].user_handle;
   const options=await generateRegistrationOptions({rpName:'SARVA',rpID:config.rpID,userID:new Uint8Array(handle),userName:user.email,userDisplayName:user.display_name,
-   attestationType:'none',preferredAuthenticatorType:'localDevice',authenticatorSelection:{authenticatorAttachment:'platform',residentKey:'required',userVerification:'required'},supportedAlgorithmIDs:[-7,-257],
+   attestationType:'none',...(req.body?.usePhone===true?{preferredAuthenticatorType:'remoteDevice'}:{}),authenticatorSelection:{residentKey:'required',userVerification:'required'},supportedAlgorithmIDs:[-7,-257],
    excludeCredentials:existing.map(row=>({id:row.credential_id,transports:row.transports}))});
-  options.hints=['client-device'];
+  options.hints=req.body?.usePhone===true?['hybrid']:['client-device','hybrid'];
   await remember(req,res,'register',options.challenge,user.id);res.json(options);
  }));
  router.post('/auth/passkeys/register/verify',safe(async(req,res)=>{
   const user=await actor(req);if(!user)return res.sendStatus(401);
   const challenge=await consume(req,res,'register');if(!challenge||String(challenge.user_id)!==String(user.id))return res.sendStatus(400);
-  if(req.body?.credential?.authenticatorAttachment==='cross-platform')return res.status(400).json({message:'Enable a passkey saved on this device. Your password remains available.'});
   const result=await verifyRegistrationResponse({response:req.body?.credential,expectedChallenge:challenge.challenge,expectedOrigin:config.origin,expectedRPID:config.rpID,requireUserVerification:true,supportedAlgorithmIDs:[-7,-257]});
   if(!result.verified)return res.sendStatus(400);
   const {credential,credentialDeviceType,credentialBackedUp}=result.registrationInfo;
@@ -97,7 +97,7 @@ export function createPasskeyRouter({db,getUserById,publicUser,tokenFor,verifyPa
  }));
  router.post('/auth/passkeys/login/options',safe(async(req,res)=>{
   const options=await generateAuthenticationOptions({rpID:config.rpID,userVerification:'required'});
-  options.hints=['client-device'];
+  options.hints=req.body?.usePhone===true?['hybrid']:['client-device','hybrid'];
   await remember(req,res,'authenticate',options.challenge);res.json(options);
  }));
  router.post('/auth/passkeys/login/verify',safe(async(req,res)=>{
@@ -116,7 +116,7 @@ export function createPasskeyRouter({db,getUserById,publicUser,tokenFor,verifyPa
   }catch{await client.query('ROLLBACK');return res.status(401).json({message:'Passkey sign-in failed. Start again or use your password.'});}finally{client.release();}
   const user=await getUserById(userId);if(!user)return res.sendStatus(401);
   await db.query('UPDATE sarva.app_user SET last_login_at=now() WHERE id=$1',[user.id]);
-  res.json({status:'ok',data:{user:publicUser(user),token:tokenFor(user,60*60*24*30)}});
+  res.json({status:'ok',data:{user:publicUser(user),token:tokenFor(user,loginDuration(req.body?.rememberDevice))}});
  }));
  router.post('/auth/passkeys/remove',safe(async(req,res)=>{
   const user=await actor(req);if(!user)return res.sendStatus(401);

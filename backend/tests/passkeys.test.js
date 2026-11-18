@@ -70,22 +70,26 @@ test('expired challenges and another account cannot enroll',async()=>{
  await pool.query('UPDATE sarva.passkey_challenge SET expires_at=now()-make_interval(mins => 1) WHERE user_id=$1',[actor.id]);
  assert.equal((await request('/passkeys/register/verify',{credential},access,ceremony.cookie)).status,400);
 });
-test('device setup rejects a reported roaming authenticator and consumes its challenge',async()=>{
- const ceremony=await options('register',access);const credential=registration(ceremony.options.challenge);
- credential.authenticatorAttachment='cross-platform';
- assert.equal((await request('/passkeys/register/verify',{credential},access,ceremony.cookie)).status,400);
- credential.authenticatorAttachment='platform';
- assert.equal((await request('/passkeys/register/verify',{credential},access,ceremony.cookie)).status,400);
+test('phone enrollment accepts a verified cross-platform credential and consumes its challenge',async()=>{
+ const response=await request('/passkeys/register/options',{password,usePhone:true},access);
+ assert.equal(response.status,200);const options=await response.json();const ceremonyCookie=cookie(response);
+ assert.deepEqual(options.hints,['hybrid']);
+ assert.notEqual(options.authenticatorSelection.authenticatorAttachment,'platform');
+ const credential=registration(options.challenge);credential.authenticatorAttachment='cross-platform';
+ assert.equal((await request('/passkeys/register/verify',{credential},access,ceremonyCookie)).status,200);
+ assert.equal((await request('/passkeys/register/verify',{credential},access,ceremonyCookie)).status,400);
+ await pool.query('DELETE FROM sarva.account_passkey WHERE credential_id=$1',[credential.id]);
 });
-test('discoverable sign-in prefers the current device and does not enumerate accounts',async()=>{
- const ceremony=await options('login');assert.deepEqual(ceremony.options.hints,['client-device']);assert.equal(ceremony.options.userVerification,'required');assert.ok(!ceremony.options.allowCredentials?.length);
+
+test('discoverable sign-in offers device and phone without enumerating accounts',async()=>{
+ const ceremony=await options('login');assert.deepEqual(ceremony.options.hints,['client-device','hybrid']);assert.equal(ceremony.options.userVerification,'required');assert.ok(!ceremony.options.allowCredentials?.length);
 });
 test('registers a cryptographically valid passkey and exposes metadata only',async()=>{
  const ceremony=await options('register',access);handle=ceremony.options.user.id;
  assert.equal(ceremony.options.authenticatorSelection.userVerification,'required');
- assert.equal(ceremony.options.authenticatorSelection.authenticatorAttachment,'platform');
+ assert.equal(ceremony.options.authenticatorSelection.authenticatorAttachment,undefined);
  assert.equal(ceremony.options.authenticatorSelection.residentKey,'required');
- assert.deepEqual(ceremony.options.hints,['client-device']);
+ assert.deepEqual(ceremony.options.hints,['client-device','hybrid']);
  const credential=registration(ceremony.options.challenge);
  const response=await request('/passkeys/register/verify',{credential,label:'Test authenticator'},access,ceremony.cookie);assert.equal(response.status,200);
  const list=await(await request('/passkeys',null,access)).json();assert.equal(list.data.length,1);assert.equal(list.data[0].label,'Test authenticator');assert.equal(list.data[0].public_key,undefined);
@@ -94,12 +98,27 @@ test('registers a cryptographically valid passkey and exposes metadata only',asy
 test('login verifies signature, account binding and roles, and blocks replay',async()=>{
  const ceremony=await options('login');const response=await request('/passkeys/login/verify',{credential:assertion(ceremony.options.challenge)},null,ceremony.cookie);assert.equal(response.status,200);
  const body=await response.json();assert.equal(String(body.data.user.id),String(actor.id));assert.deepEqual(body.data.user.roles.map(role=>role.name),['viewer']);assert.ok(body.data.token);
- const session=JSON.parse(Buffer.from(body.data.token.split('.')[0],'base64url'));assert.equal(session.exp-session.iat,30*24*60*60);
+ const session=JSON.parse(Buffer.from(body.data.token.split('.')[0],'base64url'));assert.equal(session.exp-session.iat,12*60*60);
  assert.equal((await request('/passkeys/login/verify',{credential:assertion(ceremony.options.challenge,2)},null,ceremony.cookie)).status,401);
 });
+test('phone sign-in can remember a trusted device for 30 days',async()=>{
+ const response=await request('/passkeys/login/options',{usePhone:true});
+ assert.equal(response.status,200);const options=await response.json();assert.deepEqual(options.hints,['hybrid']);
+ const result=await request('/passkeys/login/verify',{credential:assertion(options.challenge,2),rememberDevice:true},null,cookie(response));
+ assert.equal(result.status,200);const data=await result.json();const token=JSON.parse(Buffer.from(data.data.token.split('.')[0],'base64url'));
+ assert.equal(token.exp-token.iat,30*24*60*60);
+});
+
+test('password login opts into 30 days only for an explicit true value',async()=>{
+ for(const [rememberDevice,seconds] of [[false,43200],[true,2592000],['true',43200]]){
+  const response=await request('/login',{email:actor.email,password,rememberDevice});assert.equal(response.status,200);
+  const data=await response.json();const token=JSON.parse(Buffer.from(data.data.token.split('.')[0],'base64url'));assert.equal(token.exp-token.iat,seconds);
+ }
+});
+
 test('wrong origin/RP/challenge, tampered signature, missing UV, mismatched handle and stale counter are rejected',async()=>{
  for(const mode of ['origin','rp','challenge','signature','uv','handle','counter']){
-  const ceremony=await options('login');const credential=assertion(mode==='challenge'?'wrong-challenge':ceremony.options.challenge,mode==='counter'?1:2,mode==='origin'?'https://evil.example':origin,mode!=='uv',mode==='rp'?'evil.example':'localhost');
+  const ceremony=await options('login');const credential=assertion(mode==='challenge'?'wrong-challenge':ceremony.options.challenge,mode==='counter'?2:3,mode==='origin'?'https://evil.example':origin,mode!=='uv',mode==='rp'?'evil.example':'localhost');
   if(mode==='handle')credential.response.userHandle='someone-else';
   if(mode==='signature'){const bytes=Buffer.from(credential.response.signature,'base64url');bytes[bytes.length-1]^=1;credential.response.signature=bytes.toString('base64url');}
   assert.equal((await request('/passkeys/login/verify',{credential},null,ceremony.cookie)).status,401,mode);

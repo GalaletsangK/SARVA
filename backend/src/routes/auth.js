@@ -1,3 +1,4 @@
+import {loginDuration} from '../utils/authDuration.js';
 import {createPasskeyRouter} from './passkeys.js';
 import crypto from "crypto";
 import { Router } from "express";
@@ -217,7 +218,7 @@ authRouter.post("/auth/login", async (req, res) => {
     await pool.query("UPDATE sarva.app_user SET last_login_at = now() WHERE id = $1", [row.id]);
 
     const user = await getUserById(row.id);
-    res.json({ status: "ok", data: { user: publicUser(user), token: tokenFor(user) } });
+    res.json({ status: "ok", data: { user: publicUser(user), token: tokenFor(user, loginDuration(req.body?.rememberDevice)) } });
   } catch (error) {
     console.error("Login failed:", error);
     res.status(500).json({ status: "error", message: "Unable to log in" });
