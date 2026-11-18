@@ -29,19 +29,23 @@ export function useCurrentUser() {
     useEffect(() => {
         if (!token) return undefined;
 
+        let active = true;
         fetch(apiUrl("/api/auth/me"), {
             headers: { Authorization: `Bearer ${token}` },
         })
             .then((response) => {
-                if (!response.ok) throw new Error("Not authenticated");
+                if (!response.ok) throw Object.assign(new Error("Account check failed"), {status: response.status});
                 return response.json();
             })
-            .then((payload) => setUser(payload.data.user))
-            .catch(() => {
+            .then((payload) => { if (active) setUser(payload.data.user); })
+            .catch((error) => {
+                if (!active || window.localStorage.getItem(AUTH_TOKEN_KEY) !== token) return;
+                if (error.status !== 401 && error.status !== 403) return;
                 window.localStorage.removeItem(AUTH_TOKEN_KEY);
                 setToken(null);
                 setUser(null);
             });
+        return () => { active = false; };
     }, [token]);
 
     const isAdmin = useMemo(

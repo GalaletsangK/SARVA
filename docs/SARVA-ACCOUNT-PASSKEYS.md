@@ -1,3 +1,17 @@
+# Phone-assisted passkeys and remembered login — staged release, 18 November 2026
+
+This change supersedes the device-only restrictions described in the historical acceptance record below. It is ready for staged deployment; production phone/QR acceptance remains pending. Existing public keys and passwords remain usable; no SARVA database migration is required.
+
+- Login offers Sign in with a passkey and Use a phone / QR code. The latter requests the browser's hybrid-authentication prompt; browsers control their QR code and may ignore hints. Keep the phone nearby with Bluetooth on. SARVA never generates a custom authentication QR or receives biometric data.
+- Passkey setup offers this device/passkey manager or a phone. Discoverable credentials, signed server challenges, required user verification, origin/RP checks, one-use five-minute challenge cookies, rate limiting and password-confirmed enrollment/removal remain.
+- Password and passkey login both default to a 12-hour token. An unchecked-by-default Remember this device for 30 days checkbox opts into a fixed 30-day token. The server accepts only boolean true. This is not a sliding session and cannot override browser storage deletion/private-browsing policies. Logout removes the local token; existing enrolled passkeys remain.
+- Network/server errors while checking the current account no longer delete saved login tokens. Confirmed 401/403 responses still clear invalid sign-in. Header account checks retry when the window regains focus.
+- SARVA and DS Lab have separate accounts, RP IDs and credentials. A phone passkey must be enrolled for each site; there is no shared sign-on.
+
+Local verification uses the real WebAuthn verifier and PGlite's PostgreSQL engine with synthetic accounts only: 15 SARVA tests cover enrollment, phone hints, signatures, UV, origin/RP binding, replay, inactive accounts, password fallback, rate limits and both token durations. Frontend build and targeted lint are required. Physical phone QR/Face ID and real 30-day browser retention still require manual acceptance on a trusted HTTPS deployment; cryptographic tests do not prove browser UX.
+
+## Historical production acceptance (before this local change)
+
 # SARVA device passkeys: production acceptance
 
 Deployed and accepted on production on 27 October 2026 after PR #18 merged

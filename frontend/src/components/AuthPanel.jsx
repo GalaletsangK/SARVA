@@ -17,7 +17,7 @@ async function requestJson(path, options = {}) {
     const payload = await response.json().catch(() => null);
 
     if (!response.ok) {
-        throw new Error(payload?.message || `Request failed with ${response.status}`);
+        throw Object.assign(new Error(payload?.message || `Request failed with ${response.status}`), {status: response.status});
     }
 
     return payload;
@@ -53,6 +53,7 @@ export default function AuthPanel() {
     const [open, setOpen] = useState(false);
     const navigate=useNavigate();
     const [passkeysEnabled,setPasskeysEnabled]=useState(false);
+    const [rememberDevice,setRememberDevice]=useState(false);
     useEffect(()=>{let active=true;passkeyRequest('/status').then(body=>{if(active)setPasskeysEnabled(Boolean(body.enabled));}).catch(()=>{});return()=>{active=false;};},[]);
     const panelId = useId();
     const accountRef = useRef(null);
@@ -87,8 +88,10 @@ export default function AuthPanel() {
                 const payload = await requestJson("/api/auth/me", {
                     headers: { Authorization: `Bearer ${token}` },
                 });
-                if (active) setUser(payload.data.user);
-            } catch {
+                if (active && window.localStorage.getItem(AUTH_TOKEN_KEY) === token) setUser(payload.data.user);
+            } catch (error) {
+                if (error.status !== 401 && error.status !== 403) return;
+                if (window.localStorage.getItem(AUTH_TOKEN_KEY) !== token) return;
                 window.localStorage.removeItem(AUTH_TOKEN_KEY);
                 if (active) setUser(null);
             }
@@ -97,11 +100,13 @@ export default function AuthPanel() {
         loadUser();
         window.addEventListener(AUTH_CHANGED_EVENT, loadUser);
         window.addEventListener("storage", loadUser);
+        window.addEventListener("focus", loadUser);
 
         return () => {
             active = false;
             window.removeEventListener(AUTH_CHANGED_EVENT, loadUser);
             window.removeEventListener("storage", loadUser);
+            window.removeEventListener("focus", loadUser);
         };
     }, []);
 
@@ -141,6 +146,7 @@ export default function AuthPanel() {
                             body: JSON.stringify({
                                 email: form.email,
                                 password: form.password,
+                                rememberDevice,
                             }),
                         })
                     : await requestJson("/api/auth/register", {
@@ -161,12 +167,12 @@ export default function AuthPanel() {
         }
     }
 
-    async function signInWithPasskey(){
+    async function signInWithPasskey(usePhone=false){
         setLoading(true);setMessage('');
         try{
-            const optionsJSON=await passkeyRequest('/login/options',{});
+            const optionsJSON=await passkeyRequest('/login/options',{usePhone});
             const credential=await startAuthentication({optionsJSON});
-            const payload=await passkeyRequest('/login/verify',{credential});
+            const payload=await passkeyRequest('/login/verify',{credential,rememberDevice});
             window.localStorage.setItem(AUTH_TOKEN_KEY,payload.data.token);setUser(payload.data.user);notifyAuthChanged();setOpen(false);setForm(current=>({...current,password:''}));
         }catch(error){setMessage(passkeyError(error));}finally{setLoading(false);}
     }
@@ -252,7 +258,9 @@ export default function AuthPanel() {
                                 </button>
                             </div>
 
-                            {mode==='login'&&passkeysEnabled&&window.isSecureContext&&browserSupportsWebAuthn()&&<><button type="button" className="sarva-auth__passkey" disabled={loading} onClick={signInWithPasskey}>Sign in with a passkey</button><p className="sarva-auth__passwordFallback">Already enabled? Use your device PIN, fingerprint or face recognition and stay signed in for up to 30 days. Otherwise, sign in with your password below.</p></>}
+                            {mode==='login'&&passkeysEnabled&&window.isSecureContext&&browserSupportsWebAuthn()&&<><button type="button" className="sarva-auth__passkey" disabled={loading} onClick={()=>signInWithPasskey()}>Sign in with a passkey</button><button type="button" className="sarva-auth__passkey sarva-auth__passkey--phone" disabled={loading} onClick={()=>signInWithPasskey(true)}>Use a phone / QR code</button><p className="sarva-auth__passwordFallback">Use a saved passkey, or choose the phone option and scan the browser’s QR code. Unlock your phone with its PIN, fingerprint or face recognition. Keep the phone nearby with Bluetooth on. Your password also works.</p></>}
+
+                            {mode === "login" && <label className="sarva-auth__remember"><input type="checkbox" checked={rememberDevice} onChange={e=>setRememberDevice(e.target.checked)} disabled={loading}/><span>Remember this device for 30 days<small>Only on a device you trust. Otherwise, sign-in lasts up to 12 hours.</small></span></label>}
 
                             {mode === "register" && (
                                 <label>
