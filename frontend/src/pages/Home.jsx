@@ -24,7 +24,7 @@ import ulLogo from "../assets/cgc/ul.png";
 import wsuLogo from "../assets/cgc/wsu.png";
 import nwoLogo from "../assets/logos/NWO.svg";
 import dstiLogo from "../assets/logos/DSTI.png";
-import dataScienceLabLogo from "../assets/logos/lab_logo.png";
+import dataScienceLabLogo from "../assets/logos/environmental-data-research-lab.svg";
 import saeonLogo from "../assets/logos/SAEON-NRF-LOGO-alpha.png";
 import sarvaLogo from "../assets/logos/SARVA_final-logo-01b.png";
 import { apiUrl } from "../config/api";
@@ -131,7 +131,7 @@ const resourceEntryPoints = [
         to: "/municipal-risk-profiler",
     },
     {
-        title: "Environmental Data Science Lab",
+        title: "Environmental Data & Research Lab",
         detail: "Tutorials, learning pathways, prototype apps and SARVA data-science notes.",
         to: DATA_SCIENCE_LAB_PATH,
     },
@@ -1270,13 +1270,13 @@ export default function Home() {
                         <p>{hero?.description || "An open access platform linking datasets, indicators, and tools."}</p>
 
 
-                        <a href={DATA_SCIENCE_LAB_PATH} className="sarva-dash__labCallout" aria-label="Open Environmental Data Science Lab">
+                        <a href={DATA_SCIENCE_LAB_PATH} className="sarva-dash__labCallout" aria-label="Open Environmental Data &amp; Research Lab">
                             <span className="sarva-dash__labLogo">
-                                <img src={dataScienceLabLogo} alt="Environmental Data Science Lab" />
+                                <img src={dataScienceLabLogo} alt="Environmental Data &amp; Research Lab" />
                             </span>
                             <span>
                                 <em>Learning hub</em>
-                                <strong>Environmental Data Science Lab</strong>
+                                <strong>Environmental Data &amp; Research Lab</strong>
                                 <small>Tutorials, prototype apps, blog notes and practical SARVA data-science workflows.</small>
                                 <i>Open lab</i>
                             </span>
