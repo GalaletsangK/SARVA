@@ -23,6 +23,7 @@ import ufhLogo from "../assets/cgc/ufh.svg";
 import ulLogo from "../assets/cgc/ul.png";
 import wsuLogo from "../assets/cgc/wsu.png";
 import nwoLogo from "../assets/logos/NWO.svg";
+import elNinoNewsImage from "../assets/news/el-nino-pacific.png";
 import dstiLogo from "../assets/logos/DSTI.png";
 import dataScienceLabLogo from "../assets/logos/environmental-data-research-lab.svg";
 import saeonLogo from "../assets/logos/SAEON-NRF-LOGO-alpha.png";
@@ -1684,6 +1685,23 @@ export default function Home() {
                         </div>
                     </div>
                 )}
+
+                <section className="sarva-whatsNew" aria-labelledby="sarva-whats-new-title" id="whats-new">
+                    <div className="sarva-whatsNew__heading">
+                        <span>Latest from SARVA and our collaborators</span>
+                        <h2 id="sarva-whats-new-title">What’s new</h2>
+                    </div>
+                    <article className="sarva-whatsNew__card">
+                        <img src={elNinoNewsImage} alt="Conceptual illustration of warming in the equatorial Pacific during El Niño" loading="lazy" width="1536" height="1024" />
+                        <div className="sarva-whatsNew__body">
+                            <div className="sarva-whatsNew__meta"><time dateTime="2026-11-20">20 November 2026</time><span>Experimental · DS Lab</span></div>
+                            <h3>Track El Niño alongside SAEON observations</h3>
+                            <p>Explore rainfall, runoff and temperature at SAEON sites against historical patterns, with NOAA ENSO context. Follow cumulative rainfall and runoff through the October–September hydrological year.</p>
+                            <p className="sarva-whatsNew__note">An experimental dashboard. Available dates vary by site; data gaps and quality warnings remain visible.</p>
+                            <a href="https://ds-lab.saeon.ac.za/el-nino/" target="_blank" rel="noopener noreferrer">Open El Niño tracker <span aria-hidden="true">↗</span><span className="sarva-whatsNew__sr"> (opens in a new tab)</span></a>
+                        </div>
+                    </article>
+                </section>
 
                 <section className="sarva-dash__portalIntro" aria-label="SARVA portal entry points">
                     <div>
