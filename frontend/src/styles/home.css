@@ -4470,3 +4470,20 @@ body {
     .sarva-dash .sarva-dash__labCallout small { font-size: 13px; line-height: 1.6; }
     .sarva-dash .sarva-dash__labCallout i { font-size: 14px; padding-top: 4px; }
 }
+
+/* Homepage announcements: image and copy remain readable on narrow screens. */
+.sarva-whatsNew{margin:32px 0;scroll-margin-top:100px}
+.sarva-whatsNew__heading>span{font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:#526d60}
+.sarva-whatsNew__heading h2{font-size:1.8rem;margin:6px 0 18px;color:#183e32}
+.sarva-whatsNew__card{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);border:1px solid #d4dfd7;border-radius:16px;overflow:hidden;background:#fff}
+.sarva-whatsNew__card>img{display:block;width:100%;height:100%;min-height:260px;object-fit:cover}
+.sarva-whatsNew__body{padding:28px;min-width:0}
+.sarva-whatsNew__meta{display:flex;flex-wrap:wrap;gap:10px 16px;font-size:.8rem;color:#566c60;align-items:center}
+.sarva-whatsNew__meta>span{padding:5px 9px;border-radius:20px;background:#fff1d9;color:#714c12;font-weight:700}
+.sarva-whatsNew__body h3{font-size:1.5rem;line-height:1.25;color:#183e32;margin:16px 0 12px}
+.sarva-whatsNew__body p{line-height:1.6;margin:0 0 12px}
+.sarva-whatsNew__body .sarva-whatsNew__note{font-size:.85rem;color:#586e62}
+.sarva-whatsNew__body>a{display:inline-flex;gap:8px;align-items:center;margin-top:8px;background:#174d3d;color:white;border-radius:7px;padding:12px 18px;font-weight:700;text-decoration:none}
+.sarva-whatsNew__body>a:hover{background:#23634e}.sarva-whatsNew__body>a:focus-visible{outline:3px solid #bf8c2e;outline-offset:4px}
+.sarva-whatsNew__sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:700px){.sarva-whatsNew__card{grid-template-columns:1fr}.sarva-whatsNew__card>img{height:auto;min-height:0;aspect-ratio:16/9}.sarva-whatsNew__body{padding:20px}.sarva-whatsNew__body h3{font-size:1.3rem}}
