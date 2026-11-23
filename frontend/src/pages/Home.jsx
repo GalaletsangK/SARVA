@@ -1377,7 +1377,7 @@ export default function Home() {
 
 
 
-                <ForecastNotice compact strip />
+                <ForecastNotice compact strip showOfficialWarningsLink={false} />
 
                 <section className="sarva-dash__workspace" id="risk-map" ref={mapSectionRef}>
                     <article className="sarva-panel sarva-panel--map sarva-panel--featured">
