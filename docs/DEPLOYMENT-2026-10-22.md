@@ -469,3 +469,12 @@ Earlier DS Lab cleanup completed: unused build cache older than seven days recla
 ## 20 November 2026 — SARVA What’s new accepted live
 
 PR #67 (main `08d5374`) adds the experimental El Niño tracker image card to the SARVA homepage. Blue/green switch completed on port 8091; old port 8090 retained. Backup `/var/backups/sarva-frontend-bluegreen/20261120-151337`; retained rollback `sarva-frontend:rollback-bluegreen-20261120-151337`. Marc confirmed all working, including the card/link and existing login. This changed only the frontend. No cleanup ran; retain previous frontend, backend rollbacks, database volumes, CGC uploads, WEF, DS Lab tracker database and PostGIS override/image. See WHATS-NEW-2026-11-20.md for exact candidate and status.
+
+
+## 23 November 2026 — homepage SAWS link removal accepted live
+
+SARVA PR #68 merged as `99d59db57d507918e5214a0ceef32531d6450b55`. Removes only the requested “Check official SAWS forecasts and warnings” link from the homepage forecast strip and map notice. Other source attribution and interpretation text remain; the municipal planning notice retains its link. Production frontend build passed.
+
+Preparation output retained rollback `sarva-frontend:rollback-bluegreen-20261123-064616` and backup `/var/backups/sarva-frontend-bluegreen/20261123-064616`. Candidate `6a914d09d595d1112b4cd0d379d36920b2a2ab2a6524d229f48dfe19cf1c0561` was prepared on 8090 while live used 8091. Marc subsequently confirmed the live update is working and the link is gone after receiving switch instructions. A separate final switch-status transcript was not supplied; browser acceptance is operator-confirmed.
+
+Frontend-only rollout. No backend, authentication settings, CGC uploads/data, WEF, DS Lab, tracker database or PostGIS service was rebuilt or recreated by these commands. Retain the latest frontend rollback and both slots, existing backend and DS Lab/tracker rollback sets, backups, all database/upload volumes, portal PostGIS recovery image `ds-lab-production-portal-db:postgis-recovery-20261118-145313`, and `/opt/ulwazi-datascience-lab/.local/portal-postgis-recovery.yml`. No cleanup was requested or performed during this rollout. This handover update changes documentation only and requires no restart.
