@@ -970,7 +970,7 @@ export default function SouthAfricaMap({ activeMode, onModeChange, focusHighligh
             <FireDetectionsLayer map={layerMap} ready={ready} visible={activeMode === "satellite-fires"} />
             {forecastRiskVisible && (
                 <div className="sarva-map__legend sarva-map__legend--forecast" aria-label={`${forecastLayerMeta.label} legend`}>
-                    <ForecastNotice compact />
+                    <ForecastNotice compact showOfficialWarningsLink={false} />
                     <div className="sarva-map__legendHeader">
                         <strong>{forecastLayerMeta.label}</strong>
                         <button
