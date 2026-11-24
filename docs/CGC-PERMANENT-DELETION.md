@@ -1,6 +1,6 @@
-# CGC permanent deletion — local implementation, 24 November 2026
+# CGC permanent deletion — production acceptance, 24 November 2026
 
-This feature is implemented locally and has not been deployed to production.
+Released to production on 24 November 2026 through PR #71. The operator confirmed that the live functionality works.
 
 Platform administrators can use Delete permanently separately from Archive/Restore. CGC reviewers cannot permanently delete submissions. Confirmation requires the exact word DELETE and a private message of 10–2000 characters. The preview shows the title, tracked file count and stored size.
 
@@ -12,4 +12,12 @@ Migration 071 records upload ownership and backfills current files and published
 
 Validation: 33 synthetic database integration tests passed, covering permissions, all tracked file versions, required confirmation/message, stale revisions, private notices, transaction rollback, cleanup retries, unsafe/shared files, revoked roles and existing submission/feedback workflows. Frontend production build passed. No production records or files were deleted.
 
-Deployment requires migration 071 before the updated backend and frontend, using the established backup and frontend switch process. Centre testing remains pending.
+Migration 071 was applied successfully before activation of the updated application. Centre-led testing remains pending.
+
+## Production acceptance
+
+The operator confirmed successful live testing after deployment. Availability checks passed for SARVA, public CGC work, WEF Nexus, the Environmental Data & Research Lab and the El Niño tracker. This does not establish centre-led workflow acceptance or a new spatial-database verification.
+
+Existing rollback and backup safeguards remain retained. No cleanup was performed. Lab login, the tracker database and the existing PostGIS fix were outside the scope of this SARVA update.
+
+Permanent deletion remains separate from Archive/Restore. It requires platform-administrator access, an explicit confirmation and a private message to the submitter. Backup retention is separate from application deletion.
