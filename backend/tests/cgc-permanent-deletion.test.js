@@ -1,0 +1,61 @@
+import {test,before,after} from 'node:test';
+import assert from 'node:assert/strict';
+import {once} from 'node:events';
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import express from 'express';
+import {pool} from '../src/db/pool.js';
+import {createCgcWorkRouter} from '../src/routes/cgcWork.js';
+import {purgeCgcDeletion} from '../src/services/cgcDeletion.js';
+if(process.env.CGC_TEST!=='synthetic-only'||process.env.DB_NAME!=='cgc_workspace_test')throw Error('Synthetic CGC workspace database only');
+const prefix='permanent-delete-'+crypto.randomUUID(),store=await fs.mkdtemp(path.join(os.tmpdir(),'cgc-delete-'));
+const users={},workIds=[];
+const token=id=>{const data=Buffer.from(JSON.stringify({sub:String(id),roles:['admin'],exp:Math.floor(Date.now()/1000)+3600})).toString('base64url');return data+'.'+crypto.createHmac('sha256',process.env.AUTH_SECRET).update(data).digest('base64url');};
+const app=express();app.use(express.json());app.use('/api',createCgcWorkRouter(pool,store));
+app.use('/pending',createCgcWorkRouter(pool,store,{purgeFiles:async()=>{throw Error('Synthetic disk removal interruption');}}));
+const failing={query:pool.query.bind(pool),connect:async()=>{const c=await pool.connect();return {release:()=>c.release(),query:(sql,args)=>String(sql).startsWith('INSERT INTO sarva.cgc_deletion_notice')?Promise.reject(Error('Synthetic notice failure')):c.query(sql,args)};}};
+app.use('/failure',createCgcWorkRouter(failing,store));
+const server=app.listen(0,'127.0.0.1');await once(server,'listening');const origin='http://127.0.0.1:'+server.address().port;
+const call=(user,url='',body,route='api')=>fetch(origin+'/'+route+'/cgc/work'+url,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',...(user?{Authorization:'Bearer '+token(users[user])}:{})},...(body?{body:JSON.stringify(body)}:{})});
+const metadata={title:prefix,description:'Synthetic data for permanent deletion testing only.',centres:['ufs'],kind:'dataset',sourceUrl:'',licence:'CC BY 4.0',dataAccess:'not-stated'};
+async function create({unlinked=false}={}){const r=await call('owner','',{...metadata,intent:'draft'});assert.equal(r.status,201);const row=(await r.json()).data;workIds.push(row.id);if(unlinked)await pool.query('UPDATE sarva.cgc_work SET created_by=NULL WHERE id=$1',[row.id]);return row;}
+async function upload(work,text='x,y\n1,2\n'){const r=await fetch(origin+'/api/cgc/work/'+work.id+'/file',{method:'POST',headers:{Authorization:'Bearer '+token(users.owner),'Content-Type':'application/octet-stream','X-File-Name':'data.csv','X-Work-Revision':String(work.revision)},body:text});assert.equal(r.status,200);return (await r.json()).data;}
+const preview=async work=>{const r=await call('admin','/'+work.id+'/deletion-preview');assert.equal(r.status,200);return (await r.json()).data;};
+const request=work=>({confirmation:'DELETE',message:'This synthetic dataset is outside the collection scope. Please submit an appropriate repository link.',revision:work.revision});
+before(async()=>{for(const [name,role] of [['owner','cgc-user'],['other','cgc-user'],['reviewer','cgc-admin'],['viewer','viewer'],['admin','admin']]){const id=(await pool.query("INSERT INTO sarva.app_user(email,display_name,password_hash,password_salt) VALUES($1,$2,'not-login','not-login') RETURNING id",[prefix+name+'@example.invalid','Synthetic '+name])).rows[0].id;users[name]=id;await pool.query('INSERT INTO sarva.app_user_role(user_id,role_id) SELECT $1,id FROM sarva.auth_role WHERE name=$2',[id,role]);}});
+after(async()=>{await pool.query('DELETE FROM sarva.cgc_deletion_cleanup WHERE audit_id IN(SELECT id FROM sarva.cgc_deletion_audit WHERE work_id=ANY($1::bigint[]))',[workIds]);await pool.query('DELETE FROM sarva.cgc_deletion_notice WHERE audit_id IN(SELECT id FROM sarva.cgc_deletion_audit WHERE work_id=ANY($1::bigint[]))',[workIds]);await pool.query('DELETE FROM sarva.cgc_deletion_audit WHERE work_id=ANY($1::bigint[])',[workIds]);await pool.query('DELETE FROM sarva.cgc_work_event WHERE work_id=ANY($1::bigint[])',[workIds]);await pool.query('DELETE FROM sarva.cgc_work WHERE id=ANY($1::bigint[])',[workIds]);await pool.query('DELETE FROM sarva.app_user WHERE id=ANY($1::bigint[])',[Object.values(users)]);await fs.rm(store,{recursive:true,force:true});await new Promise(r=>server.close(r));await pool.end();});
+let target;
+test('only platform admins can preview/delete; forged role claims, owners and CGC reviewers cannot',async()=>{target=await upload(await create());for(const user of ['owner','other','reviewer','viewer']){assert.equal((await call(user,'/'+target.id+'/deletion-preview')).status,403);assert.equal((await call(user,'/'+target.id+'/permanent-delete',request(target))).status,403);}assert.equal((await call(null,'/'+target.id+'/permanent-delete',request(target))).status,401);assert.equal((await call('reviewer','/deletions')).status,403);assert.equal((await preview(target)).hasSubmitter,true);});
+test('all tracked uploaded versions and previous public snapshot are included; exact confirmation/message required',async()=>{
+ let r=await call('owner','/'+target.id+'/submit',{revision:target.revision});target=(await r.json()).data;
+ r=await call('reviewer','/'+target.id+'/review',{status:'published',note:'Synthetic file sharing checked',revision:target.revision});assert.equal(r.status,200);target=(await r.json()).data;
+ target=await upload(target,'x,y\n3,4\n');target=await upload(target,'x,y\n5,6\n');const p=await preview(target);assert.equal(p.fileCount,3);assert.equal(p.storedBytes,24);
+ for(const body of [{...request(p),confirmation:'delete'},{...request(p),message:''},{...request(p),revision:p.revision-1}])assert.ok([400,409].includes((await call('admin','/'+target.id+'/permanent-delete',body)).status));
+ assert.equal((await pool.query('SELECT id FROM sarva.cgc_work WHERE id=$1',[target.id])).rowCount,1);
+});
+test('permanent deletion removes row, history and files, leaves only audit and private submitter notice',async()=>{
+ const p=await preview(target),keys=(await pool.query('SELECT file_key FROM sarva.cgc_work_file WHERE work_id=$1',[target.id])).rows;
+ const r=await call('admin','/'+target.id+'/permanent-delete',request(p));assert.equal(r.status,200);const receipt=(await r.json()).data;assert.equal(receipt.filesRemoved,true);assert.equal(receipt.submitterNotified,true);
+ for(const table of ['cgc_work','cgc_work_event','cgc_work_file'])assert.equal((await pool.query('SELECT count(*)::integer AS n FROM sarva.'+table+' WHERE '+(table==='cgc_work'?'id':'work_id')+'=$1',[target.id])).rows[0].n,0);
+ for(const key of keys)await assert.rejects(fs.access(path.join(store,key.file_key)));
+ assert.equal((await call(null,'/'+target.id+'/file')).status,404);assert.equal((await call('owner','/'+target.id+'/file')).status,404);assert.equal((await call('admin','/'+target.id+'/history')).status,404);
+ assert.equal((await call('admin','/'+target.id+'/review',{status:'published',note:'Cannot restore permanent deletion',revision:p.revision})).status,404);
+ assert.equal((await call('admin','/'+target.id+'/permanent-delete',request(p))).status,404);
+ const notices=(await call('owner','/notices').then(r=>r.json())).data;assert.equal(notices.total,1);assert.equal(notices.items[0].submission_title,p.title);assert.equal(notices.items[0].message,request(p).message);assert.equal(notices.items[0].files_removed,true);assert.ok(!('pending_keys' in notices.items[0]));
+ assert.equal((await call('other','/notices?recipient='+users.owner).then(r=>r.json())).data.total,0);assert.equal((await call(null,'/notices')).status,401);
+ const audit=(await pool.query('SELECT * FROM sarva.cgc_deletion_audit WHERE work_id=$1',[target.id])).rows[0];assert.equal(String(audit.actor_id),String(users.admin));assert.ok(!('description'in audit));assert.equal(audit.file_count,3);
+});
+test('notice/audit failures roll back deletion and leave files intact',async()=>{const work=await upload(await create());const p=await preview(work);assert.equal((await call('admin','/'+work.id+'/permanent-delete',request(p),'failure')).status,500);assert.equal((await pool.query('SELECT id FROM sarva.cgc_work WHERE id=$1',[work.id])).rowCount,1);assert.equal((await pool.query('SELECT id FROM sarva.cgc_deletion_audit WHERE work_id=$1',[work.id])).rowCount,0);const key=(await pool.query('SELECT file_key FROM sarva.cgc_work WHERE id=$1',[work.id])).rows[0].file_key;await fs.access(path.join(store,key));});
+test('cleanup failures persist a non-restorable deletion and retry after a worker restart',async()=>{const work=await upload(await create());const p=await preview(work),r=await call('admin','/'+work.id+'/permanent-delete',request(p),'pending');assert.equal(r.status,202);const receipt=(await r.json()).data;assert.equal(receipt.deleted,true);assert.equal(receipt.filesRemoved,false);assert.equal((await call('owner','/'+work.id+'/file')).status,404);assert.equal((await pool.query('SELECT id FROM sarva.cgc_work WHERE id=$1',[work.id])).rowCount,0);
+ const queue=(await call('admin','/deletions').then(r=>r.json())).data.items;assert.ok(queue.some(x=>x.id===receipt.cleanupJobId));assert.ok(queue.every(x=>!('pending_keys'in x)));
+ const recovered=await purgeCgcDeletion(pool,store,receipt.cleanupJobId);assert.equal(recovered.complete,true);assert.equal(recovered.remainingFiles,0);assert.equal((await pool.query('SELECT pending_keys FROM sarva.cgc_deletion_cleanup WHERE id=$1',[receipt.cleanupJobId])).rows[0].pending_keys.length,0);
+});
+test('unlinked/imported records can be removed without inventing a recipient',async()=>{const work=await create({unlinked:true}),p=await preview(work);assert.equal(p.hasSubmitter,false);const r=await call('admin','/'+work.id+'/permanent-delete',request(p));assert.equal(r.status,200);assert.equal((await r.json()).data.submitterNotified,false);});
+test('unsafe paths and shared files are rejected without deleting another submission',async()=>{
+ const first=await upload(await create()),second=await create();const key=(await pool.query('SELECT file_key FROM sarva.cgc_work WHERE id=$1',[first.id])).rows[0].file_key;
+ await pool.query('UPDATE sarva.cgc_work SET file_key=$2 WHERE id=$1',[second.id,key]);assert.equal((await call('admin','/'+first.id+'/deletion-preview')).status,409);await fs.access(path.join(store,key));
+ await pool.query("UPDATE sarva.cgc_work SET file_key='../not-owned' WHERE id=$1",[second.id]);assert.equal((await call('admin','/'+second.id+'/deletion-preview')).status,409);await fs.access(path.join(store,key));
+});
+test('revoked platform admin loses destructive access even with an old token',async()=>{await pool.query("DELETE FROM sarva.app_user_role WHERE user_id=$1 AND role_id=(SELECT id FROM sarva.auth_role WHERE name='admin')",[users.admin]);assert.equal((await call('admin','/deletions')).status,403);assert.equal((await call('admin','/'+target.id+'/permanent-delete',request(target))).status,403);});

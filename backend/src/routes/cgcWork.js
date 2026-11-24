@@ -1,3 +1,4 @@
+import {createCgcDeletionRouter} from './cgcDeletion.js';
 import {Router} from 'express';
 import {pool} from '../db/pool.js';
 import {currentAccount} from '../utils/currentAccount.js';
@@ -31,7 +32,7 @@ export function validateFile(bytes,name){
  return type;
 }
 function clean(row,actor){const r={...row,has_file:Boolean(row.file_key),has_published_version:Boolean(row.published_snapshot)};delete r.published_snapshot;delete r.file_key;if(!actor?.canManage&&String(row.created_by)!==actor?.id){delete r.created_by;delete r.review_note;}return r;}
-export function createCgcWorkRouter(db=pool,storage=process.env.CGC_UPLOAD_DIR||'/app/uploads/cgc'){
+export function createCgcWorkRouter(db=pool,storage=process.env.CGC_UPLOAD_DIR||'/app/uploads/cgc',options={}){
  const router=Router(),account=currentAccount(db),rates=new Map();let uploadBusy=false;
  const auth=(req,res,next)=>account(req,res,async()=>{try{
   const roles=(await db.query("SELECT r.name FROM sarva.app_user_role ur JOIN sarva.auth_role r ON r.id=ur.role_id WHERE ur.user_id=$1",[req.reviewUser.id])).rows.map(r=>r.name);
@@ -49,6 +50,7 @@ export function createCgcWorkRouter(db=pool,storage=process.env.CGC_UPLOAD_DIR||
  const row=(await c.query('SELECT * FROM sarva.cgc_work WHERE id=$1 FOR UPDATE',[id])).rows[0];if(!row||(!actor.canManage&&String(row.created_by)!==actor.id))throw fail(404,'Work not found');if(!Number.isInteger(revision)||revision!==row.revision)throw fail(409,'Work changed. Refresh before saving');return row;}
  async function event(c,r,a,action,note=''){await c.query('INSERT INTO sarva.cgc_work_event(work_id,actor_id,action,note,revision) VALUES($1,$2,$3,$4,$5)',[r.id,a.id,action,note,r.revision]);}
  async function transaction(fn){const c=await db.connect();try{await c.query('BEGIN');const v=await fn(c);await c.query('COMMIT');return v;}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}}
+ router.use('/cgc/work',createCgcDeletionRouter({db,storage,auth,limit,locked,transaction,purgeFiles:options.purgeFiles}));
  const list=scope=>attempt(async(req,res)=>{
   const actor=req.reviewUser;if(scope==='review'&&!actor?.canManage)throw fail(403,'Administrator access required');const centre=String(req.query.centre||''),kind=String(req.query.kind||''),search=String(req.query.search||'').trim(),page=Number(req.query.page||1);
   if((centre&&!centres.includes(centre))||(kind&&!kinds.includes(kind))||search.length>150||!Number.isSafeInteger(page)||page<1||page>10000)throw fail(400,'Invalid filters');
@@ -59,7 +61,7 @@ export function createCgcWorkRouter(db=pool,storage=process.env.CGC_UPLOAD_DIR||
   const w=where.join(' AND '),total=(await db.query('SELECT count(*)::integer AS total FROM '+source+' WHERE '+w,values)).rows[0].total;
   const rows=(await db.query('SELECT * FROM '+source+' WHERE '+w+' ORDER BY publication_year DESC NULLS LAST,id DESC LIMIT 20 OFFSET $'+(values.length+1),[...values,(page-1)*20])).rows;res.json({data:{items:rows.map(r=>clean(r,actor)),total,page,pageSize:20}});
  });
- router.get('/cgc/work/profile',auth,attempt(async(req,res)=>{const row=(await db.query('SELECT centre FROM sarva.cgc_member_preference WHERE user_id=$1',[req.reviewUser.id])).rows[0];res.json({data:{centre:row?.centre||'',canSubmit:req.reviewUser.canSubmit,canManage:req.reviewUser.canManage,maxFileBytes:MAX}});}));
+ router.get('/cgc/work/profile',auth,attempt(async(req,res)=>{const row=(await db.query('SELECT centre FROM sarva.cgc_member_preference WHERE user_id=$1',[req.reviewUser.id])).rows[0];const noticeCount=(await db.query('SELECT count(*)::integer AS n FROM sarva.cgc_deletion_notice WHERE recipient_id=$1',[req.reviewUser.id])).rows[0].n;res.json({data:{noticeCount,canPermanentlyDelete:req.reviewUser.isAdmin,centre:row?.centre||'',canSubmit:req.reviewUser.canSubmit,canManage:req.reviewUser.canManage,maxFileBytes:MAX}});}));
  router.post('/cgc/work/profile',auth,limit,attempt(async(req,res)=>{if(!centres.includes(req.body.centre))throw fail(400,'Choose your centre');await db.query('INSERT INTO sarva.cgc_member_preference(user_id,centre) VALUES($1,$2) ON CONFLICT(user_id) DO UPDATE SET centre=excluded.centre',[req.reviewUser.id,req.body.centre]);res.json({data:{centre:req.body.centre}});}));
  router.get('/cgc/work',list('public'));router.get('/cgc/work/mine',auth,list('mine'));router.get('/cgc/work/review',auth,list('review'));
  router.post('/cgc/work',auth,limit,attempt(async(req,res)=>{const w=validateWork(req.body,{draft:req.body.intent==='draft'});const target=req.body.intent==='draft'?'draft':'pending';const row=await transaction(async c=>{const n=(await c.query("SELECT count(*)::integer AS n FROM sarva.cgc_work WHERE created_by=$1 AND status IN ('draft','pending','changes-requested')",[req.reviewUser.id])).rows[0].n;if(n>=100)throw fail(429,'Review existing submissions first');const r=(await c.query('INSERT INTO sarva.cgc_work(title,description,centres,kind,publication_year,authors,citation,licence,source_url,data_access,created_by,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *',[w.title,w.description,w.centres,w.kind,w.year,w.authors,w.citation,w.licence,w.sourceUrl,w.dataAccess,req.reviewUser.id,target])).rows[0];await event(c,r,req.reviewUser,target==='draft'?'draft-saved':'submitted');return r;});res.status(201).json({data:clean(row,req.reviewUser)});}));
@@ -77,7 +79,7 @@ export function createCgcWorkRouter(db=pool,storage=process.env.CGC_UPLOAD_DIR||
    await pipeline(req,new Transform({transform(chunk,encoding,callback){size+=chunk.length;if(size>MAX)return callback(fail(413,'File exceeds the 100 MB limit'));hash.update(chunk);callback(null,chunk);}}),createWriteStream(file,{flags:'wx',mode:0o600}));
    const type=validateFile(await fs.readFile(file),name);
    const result=await transaction(async c=>{const old=await locked(c,req.params.id,req.reviewUser,Number(req.headers['x-work-revision']));if(old.status==='archived')throw fail(400,'Archived work cannot be changed');
-    const r=(await c.query("UPDATE sarva.cgc_work SET published_snapshot=CASE WHEN status='published' THEN to_jsonb(cgc_work)-'published_snapshot' ELSE published_snapshot END,file_key=$2,file_name=$3,file_type=$4,file_size=$5,file_sha256=$6,status=CASE WHEN status='draft' THEN 'draft' ELSE 'pending' END,review_note='',revision=revision+1,updated_at=now() WHERE id=$1 RETURNING *",[old.id,key,name,type,size,hash.digest('hex')])).rows[0];await event(c,r,req.reviewUser,'file-uploaded');return r;});
+    const r=(await c.query("UPDATE sarva.cgc_work SET published_snapshot=CASE WHEN status='published' THEN to_jsonb(cgc_work)-'published_snapshot' ELSE published_snapshot END,file_key=$2,file_name=$3,file_type=$4,file_size=$5,file_sha256=$6,status=CASE WHEN status='draft' THEN 'draft' ELSE 'pending' END,review_note='',revision=revision+1,updated_at=now() WHERE id=$1 RETURNING *",[old.id,key,name,type,size,hash.digest('hex')])).rows[0];await c.query('INSERT INTO sarva.cgc_work_file(file_key,work_id,file_size) VALUES($1,$2,$3)',[key,old.id,size]);await event(c,r,req.reviewUser,'file-uploaded');return r;});
    committed=true;res.json({data:clean(result,req.reviewUser)});
   }finally{uploadBusy=false;if(!committed)await fs.unlink(file).catch(()=>{});}
  }));
