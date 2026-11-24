@@ -1,3 +1,5 @@
+import {pool as cgcCleanupPool} from './db/pool.js';
+import {startCgcDeletionWorker} from './services/cgcDeletion.js';
 import {cgcWorkRouter} from "./routes/cgcWork.js";
 import {disasterEventsRouter} from "./routes/disasterEvents.js";
 import {fireDetectionsRouter} from "./routes/fireDetections.js";
@@ -72,7 +74,7 @@ app.use("/api", libraryAdminRouter);
 app.use("/public", express.static(path.join(__dirname, "..", "public")));
 
 const port = Number(process.env.PORT || 5050);
-app.listen(port, () => {
+const server=app.listen(port, () => {
   console.log(`API running http://localhost:${port}`);
 
   if (process.env.CATALOGUE_SYNC_ENABLED !== "false") {
@@ -82,3 +84,6 @@ app.listen(port, () => {
     });
   }
 });
+
+const stopCgcCleanup=startCgcDeletionWorker(cgcCleanupPool,process.env.CGC_UPLOAD_DIR||'/app/uploads/cgc');
+server.on('close',stopCgcCleanup);
